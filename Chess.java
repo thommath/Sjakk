@@ -27,11 +27,11 @@ class Chess{
 				board.movePlayer(inp[0], inp[1]);
 				
 				board.analyze();
-				board.printAttackers();
+				board.printBegge();
 				board.moveWhite();
 				board.print();
 			}catch(FeilInputException e){
-				System.out.println("Feil input");
+				System.out.println(e.melding);
 			}catch(FinnerIkkeBrikkeException e){
 				System.out.println(e);
 			}
@@ -94,17 +94,15 @@ class Chessboard{
 				if(p == null){
 					continue;
 				}
-				try{
-					for(Action a : getAllMoves(p)){
-						if(board[a.to.x][a.to.y] != null){
-							if(board[a.to.x][a.to.y].white == p.white){
-								board[a.to.x][a.to.y].defenders++;
-							}else{
-								board[a.to.x][a.to.y].attackers++;
-							}
+				for(Action a : getAllMoves(p)){
+					if(board[a.to.x][a.to.y] != null){
+						if(board[a.to.x][a.to.y].white == p.white){
+							board[a.to.x][a.to.y].defenders++;
+						}else{
+							board[a.to.x][a.to.y].attackers++;
 						}
 					}
-				}catch(CantMoveException e){}
+				}
 			}
 		}
 	}
@@ -124,96 +122,121 @@ class Chessboard{
 		int y2 = Integer.parseInt(to.substring(1,2))-1;
 		
 		if(board[x][y] == null){
-			throw new FeilInputException();
+			throw new FeilInputException("Ingen brikke pa feltet " + bokstav[x] + (y+1));
+		}
+		if(!board[x][y].canTake(board, new Point(x2, y2))){
+			throw new FeilInputException("Ulovlig trekk");
+		}
+		if(board[x2][y2] != null && board[x2][y2].white == board[x][y].white){
+			throw new FeilInputException("Det er din brikke du prover a ta...");
 		}
 		board[x2][y2] = board[x][y];
 		board[x][y] = null;
 	}
 	
 	public void moveWhite() throws FinnerIkkeBrikkeException{
-		ArrayList<Action> options = new ArrayList<Action>();
 		//Save the king!
 		Piece king = getPieceByNameAndColor("King", true);
 		if(king == null){
 			throw new FinnerIkkeBrikkeException("Finner ikke kongen");
 		}
+		if(king.attackers > 0){
+			System.out.println("Check");
+			savePiece(king);
+		}
+		//Står ikke i sjakk, se om noen brikker henger 
+		ArrayList<Piece> henger = finnBrikkerSomHenger();
 		
-		if(king.attackers == 1){
-			System.out.println("Check by one");
-			for(Action a : slaBrikke(finnBrikkeSomTruer(king))){
-				options.add(a);
-			}
-			for(Action a : setteIMellom(king)){
-				options.add(a);
+		ArrayList<Piece> beskytt = new ArrayList<Piece>();
+		ArrayList<Piece> ta = new ArrayList<Piece>();
+		
+		for(Piece p : henger){
+			for(Piece t : finnBrikkerSomTruer(p)){
+				if(p.white){
+					beskytt.add(p);
+				}else{
+					ta.add(p);
+				}
 			}
 		}
-		if(king.attackers >= 1){
-			try{
-				Point from = king.findMe(board);
-				for(Action a : getAllPlayableMoves(king)){
-					options.add(a);
-				}
-			}catch(CantMoveException e){
-			}
-			if(!options.isEmpty()){
-				options = checkMoves(options, king.white);
-				Action a = options.get((int)(options.size()*Math.random()));
-				move(a.from, a.to);
+		if(!ta.isEmpty()){
+			move(finnBrikkeSomTruer(finnStorsteVerdi(ta)).findMe(board), finnStorsteVerdi(ta).findMe(board));
+			return;
+		}
+		
+		if(!beskytt.isEmpty()){
+			Piece redd = finnStorsteVerdi(beskytt);
+			if(finnBrikkeSomTruer(redd).value < redd.value && redd.canTake(board, finnBrikkeSomTruer(redd).findMe(board))){
+				move(redd.findMe(board), finnBrikkeSomTruer(redd).findMe(board));
+				return;
+			}else{
+				move(protectPiece(redd));
 				return;
 			}
 		}
 		
-		
 		//Random movement
-		try{
-			
+		while(true){
 			Piece p = findRandomWhitePiece();
 			Point to = getRandomMove(p);
+			if(to == null){
+				continue;
+			}
 			Point from = p.findMe(board);
 			move(from, to);
-		}catch(CantMoveException e){
-			moveWhite();
-			return;
+			break;
 		}
-		
-	/*	for(Piece[] pa : board){
-			for(Piece p : pa){
-				if(p == null || !p.white){
-					continue;
-				}
-				for(int x = 0; x < board.length; x++){
-					for(int y = 0; y < board[x].length; y++){
-						
-						if(board[x][y] != p){
-							if(p.canTake(board, new Point(x, y))){
-								
-								if(board[x][y] != null){
-									if(board[x][y].white){
-										continue;
-									}else if(board[x][y].defenders >= board[x][y].attackers){
-										continue;
-									}else{
-										board[x][y] = p;
-										Point pos = p.findMe(board);
-										board[pos.x][pos.y] = null;
-										System.out.println(p.symbol + "x" + bokstav[x] + (y+1));
-										return;
-									}
-								}else{
-									board[x][y] = p;
-									Point pos = p.findMe(board);
-									board[pos.x][pos.y] = null;
-									System.out.println(p.symbol + bokstav[x] + (y+1));
-									return;
-								}
-							}
-						}
-					}
-				}
-			}
-		}*/
 	}
 	
+	Action savePiece(Piece p){
+		ArrayList<Action> options = new ArrayList<Action>();
+		if(p.attackers == 1){
+			for(Action a : slaBrikke(finnBrikkeSomTruer(p))){
+				options.add(a);
+			}
+			for(Action a : setteIMellom(p)){
+				options.add(a);
+			}
+		}
+		if(p.attackers >= 1){
+			Point from = p.findMe(board);
+			for(Action a : getAllPlayableMoves(p)){
+				options.add(a);
+			}
+			
+			if(!options.isEmpty()){
+				options = checkMoves(options, p.white);
+				return options.get((int)(options.size()*Math.random()));
+			}
+		}
+		return null;
+	}
+	Action protectPiece(Piece p){
+		ArrayList<Action> options = new ArrayList<Action>();
+		if(p.attackers == 1){
+			for(Action a : slaBrikke(finnBrikkeSomTruer(p))){
+				options.add(a);
+			}
+			for(Action a : setteIMellom(p)){
+				options.add(a);
+			}
+			for(Action a : findProtectMoves(p)){
+				options.add(a);
+			}
+		}
+		if(p.attackers >= 1){
+			Point from = p.findMe(board);
+			for(Action a : getAllPlayableMoves(p)){
+				options.add(a);
+			}
+			
+			if(!options.isEmpty()){
+				options = checkMoves(options, p.white);
+				return options.get((int)(options.size()*Math.random()));
+			}
+		}
+		return null;
+	}
 	
 	private ArrayList<Action> setteIMellom(Piece king){
 		ArrayList<Action> options = new ArrayList<Action>();
@@ -328,17 +351,89 @@ class Chessboard{
 		return options;
 	}
 	
+	ArrayList<Action> findProtectMoves(Piece p){
+		ArrayList<Action> options = new ArrayList<Action>();
+		int protecting = p.defenders;
+		int attackers = p.attackers;
+		
+		for(Piece mp : getAllPieces(p.white)){
+			for(Action a : getAllPlayableMoves(p)){
+				Chessboard c = new Chessboard(board);
+				c.move(a);
+				c.analyze();
+				ArrayList<Piece> bsh = c.finnBrikkerSomHenger();
+				if(bsh == null){
+					options.add(a);
+				}else if(finnStorsteVerdi(bsh).white != p.white){
+					options.add(a);
+				}
+			}
+		}
+		return options;
+	}
+	
+	ArrayList<Piece> finnBrikkerSomHenger(){
+		ArrayList<Piece> henger = new ArrayList<Piece>();
+		for(Piece[] pc : board){
+			for(Piece p : pc){
+				if(p != null && (p.inDanger() || (p.attackers > 0 && finnBrikkeSomTruer(p).value < p.value))){
+					henger.add(p);
+				}
+			}
+		}
+		return henger;
+	}
+	
 	Piece finnBrikkeSomTruer(Piece p){
+		return finnMinsteVerdi(finnBrikkerSomTruer(p));
+	}
+	ArrayList<Piece> finnBrikkerSomTruer(Piece p){
+		ArrayList<Piece> br = new ArrayList<Piece>();
 		for(Piece[] pa : board){
 			for(Piece pt : pa){
 				if(pt == null || pt == p || p.white == pt.white){
 					continue;
 				}else if(pt.canTake(board, p.findMe(board))){
-					return pt;
+					br.add(pt);
 				}
 			}
 		}
-		return null;
+		return br;
+	}
+	Piece finnBrikkeSomBeskytter(Piece p){
+		return finnMinsteVerdi(finnBrikkerSomBeskytter(p));
+	}
+	ArrayList<Piece> finnBrikkerSomBeskytter(Piece p){
+		ArrayList<Piece> br = new ArrayList<Piece>();
+		for(Piece[] pa : board){
+			for(Piece pt : pa){
+				if(pt == null || pt == p || p.white != pt.white){
+					continue;
+				}else if(pt.canTake(board, p.findMe(board))){
+					br.add(pt);
+				}
+			}
+		}
+		return br;
+	}
+	
+	Piece finnMinsteVerdi(ArrayList<Piece> ap){
+		Piece minste = ap.get(0);
+		for(Piece pa : ap){
+			if(pa.value < minste.value){
+				minste = pa;
+			}
+		}
+		return minste;
+	}
+	Piece finnStorsteVerdi(ArrayList<Piece> ap){
+		Piece storste = ap.get(0);
+		for(Piece pa : ap){
+			if(pa.value > storste.value){
+				storste = pa;
+			}
+		}
+		return storste;
 	}
 	
 	ArrayList<Action> slaBrikke(Piece p){
@@ -354,6 +449,18 @@ class Chessboard{
 			}
 		}
 		return options;
+	}
+	
+	ArrayList<Piece> getAllPieces(boolean white){
+		ArrayList<Piece> pi = new ArrayList<Piece>();
+		for(Piece[] pe : board){
+			for(Piece p : pe){
+				if(p != null && p.white == white){
+					pi.add(p);
+				}
+			}
+		}
+		return pi;
 	}
 	
 	private ArrayList<Action> checkMoves(ArrayList<Action> op, boolean white){
@@ -417,14 +524,19 @@ class Chessboard{
 	}
 	
 	
-	private Point getRandomMove(Piece p) throws CantMoveException{
+	private Point getRandomMove(Piece p){
 		Action[] moves = getAllPlayableMoves(p);
-		
+		if(moves == null){
+			return null;
+		}
 		return moves[(int)(moves.length*Math.random())].to;
 	}
-	private Action[] getAllPlayableMoves(Piece p) throws CantMoveException{
+	private Action[] getAllPlayableMoves(Piece p){
 		ArrayList<Action> pm = new ArrayList<Action>();
 		Action[] moves = getAllMoves(p);
+		if(moves == null){
+			return new Action[0];
+		}
 		
 		for(Action a : moves){
 			if(board[a.to.x][a.to.y] != null){
@@ -436,12 +548,12 @@ class Chessboard{
 			}
 		}
 		if(pm.isEmpty()){
-			throw new CantMoveException();
+			return new Action[0];
 		}
 		return pm.toArray(new Action[0]);
 	}
 	
-	private Action[] getAllMoves(Piece p) throws CantMoveException{
+	private Action[] getAllMoves(Piece p){
 		ArrayList<Action> moves = new ArrayList<Action>();
 		
 		Point me = p.findMe(board);
@@ -454,22 +566,34 @@ class Chessboard{
 			}
 		}
 		if(moves.isEmpty()){
-			throw new CantMoveException();
+			return new Action[0];
 		}
 		return moves.toArray(new Action[0]);
 	}
 	
 	public void print(){
+		int n = 0;
 		for(Piece[] pi : board){
+			System.out.print(bokstav[n] + "\t");
 			for(Piece p : pi){
 				if(p != null){
+					if(!p.white){
+						System.out.print("b");
+					}
 					System.out.print(p.name + "\t");
 				}else{
 					System.out.print("-\t");
 				}
 			}
 			System.out.println();
+			System.out.println();
+			n++;
 		}
+		System.out.print("\t");
+		for(n = 0; n < board.length; n++){
+			System.out.print((n+1) + "\t");
+		}
+		System.out.println();
 	}
 	public void printDefenders(){
 		for(Piece[] pi : board){
@@ -495,7 +619,26 @@ class Chessboard{
 			System.out.println();
 		}
 	}
-	
+	public void printBegge(){
+		for(Piece[] pi : board){
+			for(Piece p : pi){
+				if(p != null){
+					System.out.print(p.defenders + " ");
+				}else{
+					System.out.print("- ");
+				}
+			}
+			System.out.print("\t");
+			for(Piece p : pi){
+				if(p != null){
+					System.out.print(p.attackers + " ");
+				}else{
+					System.out.print("- ");
+				}
+			}
+			System.out.println();
+		}
+	}
 }
 
 class Piece{
@@ -515,7 +658,7 @@ class Piece{
 	}
 	
 	public boolean inDanger(){
-		return defenders >= attackers;
+		return defenders < attackers;
 	}
 	
 	public int getValue(){
@@ -632,41 +775,33 @@ class Piece{
 		return false;
 	}
 	private boolean checkPathRightUp(Point from, Point to, Piece[][] board){
-		for(int n = from.x+1; n < to.x; n++){
-			for(int m = from.y+1; m < to.y; m++){
-				if(board[n][m] != null){
-					return false;
-				}
+		for(int n = 1; from.x+n < to.x; n++){
+			if(board[from.x+n][from.y+n] != null){
+				return false;
 			}
 		}
 		return true;
 	}
 	private boolean checkPathRightDown(Point from, Point to, Piece[][] board){
-		for(int n = from.x+1; n < to.x; n++){
-			for(int m = from.y-1; m > to.y; m--){
-				if(board[n][m] != null){
-					return false;
-				}
+		for(int n = 1; from.x+n < to.x; n++){
+			if(board[from.x+n][from.y-n] != null){
+				return false;
 			}
 		}
 		return true;
 	}
 	private boolean checkPathLeftUp(Point from, Point to, Piece[][] board){
-		for(int n = from.x-1; n > to.x; n--){
-			for(int m = from.y+1; m < to.y; m++){
-				if(board[n][m] != null){
-					return false;
-				}
+		for(int n = 1; from.x-n > to.x; n++){
+			if(board[from.x-n][from.y+n] != null){
+				return false;
 			}
 		}
 		return true;
 	}
 	private boolean checkPathLeftDown(Point from, Point to, Piece[][] board){
-		for(int n = from.x-1; n > to.x; n--){
-			for(int m = from.y-1; m > to.y; m--){
-				if(board[n][m] != null){
-					return false;
-				}
+		for(int n = 1; from.x-n > to.x; n++){
+			if(board[from.x-n][from.y-n] != null){
+				return false;
 			}
 		}
 		return true;
@@ -686,13 +821,13 @@ class Piece{
 		if(white){
 			if((from.x+1 == to.x || from.x-1 == to.x) && from.y+1 == to.y && board[to.x][to.y] != null){
 				return true;
-			}else if(from.x == to.x && (from.y+1 == to.y || (from.y+2 == to.y && from.y == 1))){
+			}else if(from.x == to.x && ((from.y+1 == to.y && board[to.x][to.y] == null) || (from.y+2 == to.y && from.y == 6 && board[to.x][to.y] == null && board[to.x][to.y+1] == null))){
 				return true;
 			}
 		}else{
 			if((from.x+1 == to.x || from.x-1 == to.x) && from.y-1 == to.y && board[to.x][to.y] != null){
 				return true;
-			}else if(from.x == to.x && (from.y-1 == to.y || (from.y-2 == to.y && from.y == 6))){
+			}else if(from.x == to.x && ((from.y-1 == to.y && board[to.x][to.y] == null) || (from.y-2 == to.y && from.y == 6 && board[to.x][to.y] == null && board[to.x][to.y-1] == null))){
 				return true;
 			}
 		}
@@ -824,7 +959,12 @@ class Point{
 }
 
 class CantMoveException extends Exception{}
-class FeilInputException extends Exception{}
+class FeilInputException extends Exception{
+	String melding = "";
+	FeilInputException(String e){
+		melding = e;
+	}
+}
 class FinnerIkkeBrikkeException extends Exception{
 	String melding = "";
 	FinnerIkkeBrikkeException(String e){
