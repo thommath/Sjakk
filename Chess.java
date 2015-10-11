@@ -176,16 +176,14 @@ class Chessboard{
 		}
 		
 		//Random movement
-		while(true){
-			Piece p = findRandomWhitePiece();
-			Point to = getRandomMove(p);
-			if(to == null){
-				continue;
-			}
-			Point from = p.findMe(board);
-			move(from, to);
-			break;
+		
+		Action a = getRandomMove();
+		if(a == null){
+			System.out.println("Finner ingen lovlige trekk");
+			System.exit(0);
 		}
+		move(a);
+		
 	}
 	
 	Action savePiece(Piece p){
@@ -362,7 +360,7 @@ class Chessboard{
 				c.move(a);
 				c.analyze();
 				ArrayList<Piece> bsh = c.finnBrikkerSomHenger();
-				if(bsh == null){
+				if(bsh == null || bsh.isEmpty()){
 					options.add(a);
 				}else if(finnStorsteVerdi(bsh).white != p.white){
 					options.add(a);
@@ -427,6 +425,9 @@ class Chessboard{
 		return minste;
 	}
 	Piece finnStorsteVerdi(ArrayList<Piece> ap){
+		if(ap.isEmpty()){
+			return null;
+		}
 		Piece storste = ap.get(0);
 		for(Piece pa : ap){
 			if(pa.value > storste.value){
@@ -507,29 +508,44 @@ class Chessboard{
 		return null;
 	}
 	
-	private Piece findRandomWhitePiece(){
+	private ArrayList<Piece> findRandomWhitePieces(){
 		ArrayList<Piece> whitePices = new ArrayList<Piece>();
 		
-		for(Piece[] pa : board){
-			for(Piece p : pa){
-				if(p == null){
-					continue;
-				}else if(p.white){
-					whitePices.add(p);
-				}
-			}
+		for(Piece p : getAllPieces(true)){
+			whitePices.add((int)(whitePices.size()*Math.random()), p);
 		}
-		
-		return whitePices.get((int)(whitePices.size()*Math.random()));
+		return whitePices;
 	}
 	
 	
-	private Point getRandomMove(Piece p){
-		Action[] moves = getAllPlayableMoves(p);
-		if(moves == null){
-			return null;
+	private Action getRandomMove(){
+		for(Piece p : findRandomWhitePieces()){
+			Action[] moves = getAllPlayableMoves(p);
+			if(moves.length == 0){
+				continue;
+			}
+			
+			for(Action a : moves){
+				Chessboard c = new Chessboard(board);
+				c.move(a);
+				c.analyze();
+				if(c.finnBrikkerSomHenger().isEmpty() || c.finnStorsteVerdi(c.finnBrikkerSomHenger()).white != p.white){
+					return a;
+				}
+			}
 		}
-		return moves[(int)(moves.length*Math.random())].to;
+		for(Piece p : findRandomWhitePieces()){
+			Action[] moves = getAllPlayableMoves(p);
+			if(moves.length == 0){
+				continue;
+			}
+			
+			for(Action a : moves){
+				return a;
+			}
+		}
+		
+		return null;
 	}
 	private Action[] getAllPlayableMoves(Piece p){
 		ArrayList<Action> pm = new ArrayList<Action>();
