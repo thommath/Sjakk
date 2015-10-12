@@ -13,7 +13,7 @@ class Chess{
 		board.printAttackers();
 		try{
 			
-		board.moveWhite();
+		board.moveComputer(true, true);
 		
 		}catch(FinnerIkkeBrikkeException e){
 			System.out.println(e);
@@ -28,7 +28,7 @@ class Chess{
 				
 				board.analyze();
 				board.printBegge();
-				String m = board.moveWhite();
+				String m = board.moveComputer(true, true);
 				board.print();
 				System.out.println(m);
 			}catch(FeilInputException e){
@@ -111,6 +111,9 @@ class Chessboard{
 	public void movePlayer(String from, String to) throws FeilInputException{
 		int x = 0;
 		int x2 = 0;
+		int y;
+		int y2;
+		try{
 		for(int n = 0; n < bokstav.length; n++){
 			if(bokstav[n].equals(from.substring(0,1))){
 				x = n;
@@ -119,8 +122,13 @@ class Chessboard{
 				x2 = n;
 			}
 		}
-		int y = Integer.parseInt(from.substring(1,2))-1;
-		int y2 = Integer.parseInt(to.substring(1,2))-1;
+		y = Integer.parseInt(from.substring(1,2))-1;
+		y2 = Integer.parseInt(to.substring(1,2))-1;
+		}catch(StringIndexOutOfBoundsException e){
+			throw new FeilInputException("Feil format");
+		}catch(NumberFormatException e){
+			throw new FeilInputException("Feil format");
+		}
 		
 		if(board[x][y] == null){
 			throw new FeilInputException("Ingen brikke pa feltet " + bokstav[x] + (y+1));
@@ -135,16 +143,29 @@ class Chessboard{
 		board[x][y] = null;
 	}
 	
-	public String moveWhite() throws FinnerIkkeBrikkeException{
+	public String moveComputer(boolean white, boolean first) throws FinnerIkkeBrikkeException{
 		//Save the king!
-		Piece king = getPieceByNameAndColor("King", true);
+		Piece king = getPieceByNameAndColor("King", white);
 		if(king == null){
 			throw new FinnerIkkeBrikkeException("Finner ikke kongen");
 		}
 		if(king.attackers > 0){
 			System.out.println("Check");
-			savePiece(king);
+			return move(savePiece(king));
 		}
+		//Sjekk om du kan matte
+		if(first){
+			for(Action a : getAllPlayableMoves(white)){
+				Chessboard c = new Chessboard(board);
+				c.move(a);
+				c.analyze();
+				if(c.moveComputer(!white, false) == null){
+					return move(a);
+				}
+			}
+			
+		}
+		
 		//Står ikke i sjakk, se om noen brikker henger 
 		ArrayList<Piece> henger = finnBrikkerSomHenger();
 		
@@ -174,19 +195,19 @@ class Chessboard{
 		}
 		
 		//Tru en brikke
-		for(Piece p : getAllPieces(false)){
+		for(Piece p : getAllPieces(!white)){
 			for(Action a : findAttackMoves(p)){
 				Chessboard c = new Chessboard(board);
 				c.move(a);
 				c.analyze();
-				if(!c.finnBrikkerSomHenger().isEmpty() && finnStorsteVerdi(c.finnBrikkerSomHenger()).white != true){
+				if(!c.finnBrikkerSomHenger().isEmpty() && finnStorsteVerdi(c.finnBrikkerSomHenger()).white != white){
 					return move(a);
 				}
 			}
 		}
 		//Random movement
 		
-		Action a = getRandomMove();
+		Action a = getRandomMove(white);
 		if(a == null){
 			System.out.println("Finner ingen lovlige trekk");
 			System.exit(0);
@@ -306,7 +327,7 @@ class Chessboard{
 					}
 				}else if(movementType.equals("RightDown")){//Flytt en brukke i veien
 					
-					for(int na = 1; na < to.x; na++){
+					for(int na = 1; from.x+na < to.x && from.y-na > to.y; na++){
 						for(Piece temp : pa){
 							if(temp == null || temp.white != king.white){
 								continue;
@@ -318,7 +339,7 @@ class Chessboard{
 					}
 				}else if(movementType.equals("RightUp")){//Flytt en brukke i veien
 					
-					for(int na = 1; na < to.x; na++){
+					for(int na = 1; from.x+na < to.x && from.y+na < to.y; na++){
 						for(Piece temp : pa){
 							if(temp == null || temp.white != king.white){
 								continue;
@@ -330,7 +351,7 @@ class Chessboard{
 					}
 				}else if(movementType.equals("LeftDown")){//Flytt en brukke i veien
 					
-					for(int na = 1; na < to.x; na++){
+					for(int na = 1; from.x-na > to.x && from.y-na > to.y; na++){
 						for(Piece temp : pa){
 							if(temp == null || temp.white != king.white){
 								continue;
@@ -342,7 +363,7 @@ class Chessboard{
 					}
 				}else if(movementType.equals("LeftUp")){//Flytt en brukke i veien
 					
-					for(int na = 1; na < to.x; na++){
+					for(int na = 1; from.x-na > to.x && from.y+na < to.y; na++){
 						for(Piece temp : pa){
 							if(temp == null || temp.white != king.white){
 								continue;
@@ -510,6 +531,9 @@ class Chessboard{
 	}
 	
 	String move(Point from, Point to){
+		if(from == null){
+			return null;
+		}
 		Piece p = board[from.x][from.y];
 		Piece temp = board[to.x][to.y];
 		board[from.x][from.y] = null;
@@ -522,6 +546,9 @@ class Chessboard{
 		
 	}
 	String move(Action a){
+		if(a == null){
+			return null;
+		}
 		return move(a.from, a.to);
 	}
 	
@@ -538,18 +565,18 @@ class Chessboard{
 		return null;
 	}
 	
-	private ArrayList<Piece> findRandomWhitePieces(){
+	private ArrayList<Piece> findRandomPieces(boolean white){
 		ArrayList<Piece> whitePices = new ArrayList<Piece>();
 		
-		for(Piece p : getAllPieces(true)){
+		for(Piece p : getAllPieces(white)){
 			whitePices.add((int)(whitePices.size()*Math.random()), p);
 		}
 		return whitePices;
 	}
 	
 	
-	private Action getRandomMove(){
-		for(Piece p : findRandomWhitePieces()){
+	private Action getRandomMove(boolean white){
+		for(Piece p : findRandomPieces(white)){
 			Action[] moves = getAllPlayableMoves(p);
 			if(moves.length == 0){
 				continue;
@@ -564,7 +591,7 @@ class Chessboard{
 				}
 			}
 		}
-		for(Piece p : findRandomWhitePieces()){
+		for(Piece p : findRandomPieces(white)){
 			Action[] moves = getAllPlayableMoves(p);
 			if(moves.length == 0){
 				continue;
@@ -591,6 +618,29 @@ class Chessboard{
 				}
 			}else{
 				pm.add(a);
+			}
+		}
+		if(pm.isEmpty()){
+			return new Action[0];
+		}
+		return pm.toArray(new Action[0]);
+	}
+	private Action[] getAllPlayableMoves(boolean white){
+		ArrayList<Action> pm = new ArrayList<Action>();
+		for(Piece p : getAllPieces(white)){
+			Action[] moves = getAllMoves(p);
+			if(moves == null){
+				return new Action[0];
+			}
+			
+			for(Action a : moves){
+				if(board[a.to.x][a.to.y] != null){
+					if(board[a.to.x][a.to.y].white != p.white){
+						pm.add(a);
+					}
+				}else{
+					pm.add(a);
+				}
 			}
 		}
 		if(pm.isEmpty()){
@@ -825,7 +875,7 @@ class Piece{
 		return false;
 	}
 	private boolean checkPathRightUp(Point from, Point to, Piece[][] board){
-		for(int n = 1; from.x+n < to.x; n++){
+		for(int n = 1; from.x+n < to.x && from.y+n < to.y; n++){
 			if(board[from.x+n][from.y+n] != null){
 				return false;
 			}
@@ -833,7 +883,7 @@ class Piece{
 		return true;
 	}
 	private boolean checkPathRightDown(Point from, Point to, Piece[][] board){
-		for(int n = 1; from.x+n < to.x; n++){
+		for(int n = 1; from.x+n < to.x && from.y-n > to.y; n++){
 			if(board[from.x+n][from.y-n] != null){
 				return false;
 			}
@@ -841,7 +891,7 @@ class Piece{
 		return true;
 	}
 	private boolean checkPathLeftUp(Point from, Point to, Piece[][] board){
-		for(int n = 1; from.x-n > to.x; n++){
+		for(int n = 1; from.x-n > to.x && from.y+n < to.y; n++){
 			if(board[from.x-n][from.y+n] != null){
 				return false;
 			}
@@ -849,7 +899,7 @@ class Piece{
 		return true;
 	}
 	private boolean checkPathLeftDown(Point from, Point to, Piece[][] board){
-		for(int n = 1; from.x-n > to.x; n++){
+		for(int n = 1; from.x-n > to.x && from.y-n > to.y; n++){
 			if(board[from.x-n][from.y-n] != null){
 				return false;
 			}
@@ -871,13 +921,13 @@ class Piece{
 		if(white){
 			if((from.x+1 == to.x || from.x-1 == to.x) && from.y+1 == to.y && board[to.x][to.y] != null){
 				return true;
-			}else if(from.x == to.x && ((from.y+1 == to.y && board[to.x][to.y] == null) || (from.y+2 == to.y && from.y == 6 && board[to.x][to.y] == null && board[to.x][to.y+1] == null))){
+			}else if(from.x == to.x && ((from.y+1 == to.y && board[to.x][to.y] == null) || (from.y+2 == to.y && from.y == 6 && board[to.x][to.y] == null && to.y+1 < 8 && board[to.x][to.y+1] == null))){
 				return true;
 			}
 		}else{
 			if((from.x+1 == to.x || from.x-1 == to.x) && from.y-1 == to.y && board[to.x][to.y] != null){
 				return true;
-			}else if(from.x == to.x && ((from.y-1 == to.y && board[to.x][to.y] == null) || (from.y-2 == to.y && from.y == 6 && board[to.x][to.y] == null && board[to.x][to.y-1] == null))){
+			}else if(from.x == to.x && ((from.y-1 == to.y && board[to.x][to.y] == null) || (from.y-2 == to.y && from.y == 6 && board[to.x][to.y] == null && to.y-1 > 0 && board[to.x][to.y-1] == null))){
 				return true;
 			}
 		}
