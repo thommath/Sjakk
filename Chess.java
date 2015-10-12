@@ -28,8 +28,9 @@ class Chess{
 				
 				board.analyze();
 				board.printBegge();
-				board.moveWhite();
+				String m = board.moveWhite();
 				board.print();
+				System.out.println(m);
 			}catch(FeilInputException e){
 				System.out.println(e.melding);
 			}catch(FinnerIkkeBrikkeException e){
@@ -134,7 +135,7 @@ class Chessboard{
 		board[x][y] = null;
 	}
 	
-	public void moveWhite() throws FinnerIkkeBrikkeException{
+	public String moveWhite() throws FinnerIkkeBrikkeException{
 		//Save the king!
 		Piece king = getPieceByNameAndColor("King", true);
 		if(king == null){
@@ -159,22 +160,30 @@ class Chessboard{
 				}
 			}
 		}
-		if(!ta.isEmpty()){
-			move(finnBrikkeSomTruer(finnStorsteVerdi(ta)).findMe(board), finnStorsteVerdi(ta).findMe(board));
-			return;
+		if(!ta.isEmpty() && (beskytt.isEmpty() || finnStorsteVerdi(ta).value > finnStorsteVerdi(beskytt).value)){
+			return move(finnBrikkeSomTruer(finnStorsteVerdi(ta)).findMe(board), finnStorsteVerdi(ta).findMe(board));
 		}
 		
 		if(!beskytt.isEmpty()){
 			Piece redd = finnStorsteVerdi(beskytt);
 			if(finnBrikkeSomTruer(redd).value < redd.value && redd.canTake(board, finnBrikkeSomTruer(redd).findMe(board))){
-				move(redd.findMe(board), finnBrikkeSomTruer(redd).findMe(board));
-				return;
+				return move(redd.findMe(board), finnBrikkeSomTruer(redd).findMe(board));
 			}else{
-				move(protectPiece(redd));
-				return;
+				return move(protectPiece(redd));
 			}
 		}
 		
+		//Tru en brikke
+		for(Piece p : getAllPieces(false)){
+			for(Action a : findAttackMoves(p)){
+				Chessboard c = new Chessboard(board);
+				c.move(a);
+				c.analyze();
+				if(!c.finnBrikkerSomHenger().isEmpty() && finnStorsteVerdi(c.finnBrikkerSomHenger()).white != true){
+					return move(a);
+				}
+			}
+		}
 		//Random movement
 		
 		Action a = getRandomMove();
@@ -182,7 +191,7 @@ class Chessboard{
 			System.out.println("Finner ingen lovlige trekk");
 			System.exit(0);
 		}
-		move(a);
+		return move(a);
 		
 	}
 	
@@ -369,6 +378,26 @@ class Chessboard{
 		}
 		return options;
 	}
+	ArrayList<Action> findAttackMoves(Piece p){
+		ArrayList<Action> options = new ArrayList<Action>();
+		int protecting = p.defenders;
+		int attackers = p.attackers;
+		
+		for(Piece mp : getAllPieces(p.white)){
+			for(Action a : getAllPlayableMoves(p)){
+				Chessboard c = new Chessboard(board);
+				c.move(a);
+				c.analyze();
+				ArrayList<Piece> bsh = c.finnBrikkerSomHenger();
+				if(bsh == null || bsh.isEmpty()){
+					continue;
+				}else if(finnStorsteVerdi(bsh).white != p.white){
+					options.add(a);
+				}
+			}
+		}
+		return options;
+	}
 	
 	ArrayList<Piece> finnBrikkerSomHenger(){
 		ArrayList<Piece> henger = new ArrayList<Piece>();
@@ -471,7 +500,7 @@ class Chessboard{
 			Chessboard c = new Chessboard(board);
 			c.move(a);
 			c.analyze();
-			System.out.println(c.getPieceByNameAndColor("King", white).attackers);
+//			System.out.println(c.getPieceByNameAndColor("King", white).attackers);
 			if(c.getPieceByNameAndColor("King", white).attackers > 0){
 				continue;
 			}
@@ -480,19 +509,20 @@ class Chessboard{
 		return options;
 	}
 	
-	void move(Point from, Point to){
+	String move(Point from, Point to){
 		Piece p = board[from.x][from.y];
-		if(board[to.x][to.y] != null){
-			System.out.println(p.symbol + "x" + bokstav[to.x] + (to.y+1));
-		}else{
-			System.out.println(p.symbol + bokstav[to.x] + (to.y+1));
-		}
-		
+		Piece temp = board[to.x][to.y];
 		board[from.x][from.y] = null;
 		board[to.x][to.y] = p;
+		if(temp != null){
+			return (p.symbol + "x" + bokstav[to.x] + (to.y+1));
+		}else{
+			return (p.symbol + bokstav[to.x] + (to.y+1));
+		}
+		
 	}
-	void move(Action a){
-		move(a.from, a.to);
+	String move(Action a){
+		return move(a.from, a.to);
 	}
 	
 	public Piece getPieceByNameAndColor(String s, boolean white){
@@ -675,6 +705,10 @@ class Piece{
 	
 	public boolean inDanger(){
 		return defenders < attackers;
+	}
+	
+	public boolean nestenInDanger(){
+		return defenders < attackers+1;
 	}
 	
 	public int getValue(){
