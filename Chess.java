@@ -7,10 +7,7 @@ class Chess{
 		Scanner in = new Scanner(System.in);
 		
 		Chessboard board = new Chessboard();
-		board.analyze();	
-		board.print();
-		board.printDefenders();
-		board.printAttackers();
+		board.analyze();
 		try{
 			
 		board.moveComputer(true, true);
@@ -18,18 +15,16 @@ class Chess{
 		}catch(FinnerIkkeBrikkeException e){
 			System.out.println(e);
 		}
-		board.print();
+		board.printColor(true);
 		
 		while(true){
 			try{
-				String input = in.nextLine();
-				String[] inp = input.split(" ");
-				board.movePlayer(inp[0], inp[1]);
+				board.movePlayer(in.nextLine(), false);
 				
 				board.analyze();
 				board.printBegge();
 				String m = board.moveComputer(true, true);
-				board.print();
+				board.printColor(false);
 				System.out.println(m);
 			}catch(FeilInputException e){
 				System.out.println(e.melding);
@@ -108,44 +103,70 @@ class Chessboard{
 		}
 	}
 	
-	public void movePlayer(String from, String to) throws FeilInputException{
-		int x = 0;
-		int x2 = 0;
-		int y;
-		int y2;
+	public void movePlayer(String input, boolean white) throws FeilInputException{
+		Point to = null;
+		Piece p = null;
 		try{
-		for(int n = 0; n < bokstav.length; n++){
-			if(bokstav[n].equals(from.substring(0,1))){
-				x = n;
+			String[] inp = input.split(" ");
+			if(inp.length == 2){
+				int x = charToInt(inp[0].substring(0,1));
+				int x2 = charToInt(inp[1].substring(0,1));
+				int y = Integer.parseInt(inp[0].substring(1,2))-1;
+				int y2 = Integer.parseInt(inp[1].substring(1,2))-1;
+				p = board[x][y];
+				to = new Point(x2, y2);
+			}else{
+				if(input.length() == 3){
+					to = new Point(charToInt(input.substring(1,2)), Integer.parseInt(input.substring(2,3))-1);
+					p = getPiece(input.substring(0, 1), white, to);
+				}else if(input.length() == 2){
+					to = new Point(charToInt(input.substring(0,1)), Integer.parseInt(input.substring(1,2))-1);
+					p = getPiece("Pawn", white, to);
+				}else if(input.length() == 4){
+					if(input.substring(1,2).equals("x")){
+						to = new Point(charToInt(input.substring(2,3)), Integer.parseInt(input.substring(3,4))-1);
+						p = getPiece(input.substring(0,1), white, to);
+						if(board[to.x][to.y] == null){
+							throw new FeilInputException("Ingen brikke pa feltet " + bokstav[to.x] + (to.y+1));
+						}
+					}else{
+						int x = charToInt(input.substring(1,2));
+						if(x == -1){
+							int y = Integer.parseInt(input.substring(1,2))-1;
+							to = new Point(charToInt(input.substring(2,3)), Integer.parseInt(input.substring(3,4))-1);
+							p = getPieceByY(input.substring(0,1), white, to, y);
+						}else{
+							to = new Point(charToInt(input.substring(2,3)), Integer.parseInt(input.substring(3,4))-1);
+							p = getPieceByX(input.substring(0,1), white, to, x);
+							
+						}
+					}
+				}
 			}
-			if(bokstav[n].equals(to.substring(0,1))){
-				x2 = n;
-			}
-		}
-		y = Integer.parseInt(from.substring(1,2))-1;
-		y2 = Integer.parseInt(to.substring(1,2))-1;
 		}catch(StringIndexOutOfBoundsException e){
 			throw new FeilInputException("Feil format");
 		}catch(NumberFormatException e){
 			throw new FeilInputException("Feil format");
 		}
 		
-		if(board[x][y] == null){
-			throw new FeilInputException("Ingen brikke pa feltet " + bokstav[x] + (y+1));
+		if(p == null){
+			throw new FeilInputException("Finner ikke brikken");
 		}
-		if(!board[x][y].canTake(board, new Point(x2, y2))){
+		if(to == null){
+			throw new FeilInputException("Skjonner ikke, :'(");
+		}
+		if(!p.canTake(board, to)){
 			throw new FeilInputException("Ulovlig trekk");
 		}
-		if(board[x2][y2] != null && board[x2][y2].white == board[x][y].white){
+		if(board[to.x][to.y] != null && board[to.x][to.y].white == p.white){
 			throw new FeilInputException("Det er din brikke du prover a ta...");
 		}
-		board[x2][y2] = board[x][y];
-		board[x][y] = null;
+		move(p.findMe(board), to);
 	}
 	
 	public String moveComputer(boolean white, boolean first) throws FinnerIkkeBrikkeException{
 		//Save the king!
-		Piece king = getPieceByNameAndColor("King", white);
+		Piece king = getPiece("King", white);
 		if(king == null){
 			throw new FinnerIkkeBrikkeException("Finner ikke kongen");
 		}
@@ -187,7 +208,7 @@ class Chessboard{
 		
 		if(!beskytt.isEmpty()){
 			Piece redd = finnStorsteVerdi(beskytt);
-			if(finnBrikkeSomTruer(redd).value < redd.value && redd.canTake(board, finnBrikkeSomTruer(redd).findMe(board))){
+			if(finnBrikkeSomTruer(redd).value < redd.value && redd.canTake(board, finnBrikkeSomTruer(redd).findMe(board))){//Sjekke at brikken som truer storste verdi ikke er den jeg kan ta
 				return move(redd.findMe(board), finnBrikkeSomTruer(redd).findMe(board));
 			}else{
 				return move(protectPiece(redd));
@@ -200,7 +221,7 @@ class Chessboard{
 				Chessboard c = new Chessboard(board);
 				c.move(a);
 				c.analyze();
-				if(!c.finnBrikkerSomHenger().isEmpty() && finnStorsteVerdi(c.finnBrikkerSomHenger()).white != white){
+				if(!c.finnBrikkerSomHenger().isEmpty() && finnStorsteVerdi(c.finnBrikkerSomHenger()).white != white){//Sjekke at brikken som truer storste verdi ikke er den jeg kan ta
 					return move(a);
 				}
 			}
@@ -410,7 +431,7 @@ class Chessboard{
 				c.move(a);
 				c.analyze();
 				ArrayList<Piece> bsh = c.finnBrikkerSomHenger();
-				if(bsh == null || bsh.isEmpty()){
+				if(bsh.isEmpty()){
 					continue;
 				}else if(finnStorsteVerdi(bsh).white != p.white){
 					options.add(a);
@@ -494,7 +515,6 @@ class Chessboard{
 				if(pt == null || pt == p || p.white == pt.white){
 					continue;
 				}else if(pt.canTake(board, p.findMe(board))){
-	//				System.out.println("Kan trekke " + bokstav[from.x] + (from.y+1) + " - " + bokstav[to.x] + (to.y+1));
 					options.add(new Action(pt.findMe(board), p.findMe(board)));
 				}
 			}
@@ -521,8 +541,7 @@ class Chessboard{
 			Chessboard c = new Chessboard(board);
 			c.move(a);
 			c.analyze();
-//			System.out.println(c.getPieceByNameAndColor("King", white).attackers);
-			if(c.getPieceByNameAndColor("King", white).attackers > 0){
+			if(c.getPiece("King", white).attackers > 0){
 				continue;
 			}
 			options.add(a);
@@ -552,15 +571,67 @@ class Chessboard{
 		return move(a.from, a.to);
 	}
 	
-	public Piece getPieceByNameAndColor(String s, boolean white){
+	public Piece getPiece(String s, boolean white){
+		ArrayList<Piece> ap = new ArrayList<Piece>();
 		for(Piece[] pa : board){
 			for(Piece p : pa){
 				if(p == null){
 					continue;
-				}else if(p.white == white && p.name.equals(s)){
-					return p;
+				}else if(p.white == white && (p.name.equals(s) || p.symbol.equals(s))){
+					ap.add(p);
 				}
 			}
+		}
+		if(ap.size() == 1){
+			return ap.get(0);
+		}
+		return null;
+	}
+	public Piece getPiece(String s, boolean white, Point to){
+		ArrayList<Piece> ap = new ArrayList<Piece>();
+		for(Piece[] pa : board){
+			for(Piece p : pa){
+				if(p == null){
+					continue;
+				}else if(p.white == white && (p.name.equals(s) || p.symbol.equals(s)) && p.canTake(board, to)){
+					ap.add(p);
+				}
+			}
+		}
+		if(ap.size() == 1){
+			return ap.get(0);
+		}
+		return null;
+	}
+	public Piece getPieceByY(String s, boolean white, Point to, int y){
+		ArrayList<Piece> ap = new ArrayList<Piece>();
+		for(Piece[] pa : board){
+			for(Piece p : pa){
+				if(p == null){
+					continue;
+				}else if(p.white == white && (p.name.equals(s) || p.symbol.equals(s)) && p.canTake(board, to) &&p.findMe(board).y == y){
+					ap.add(p);
+				}
+			}
+		}
+		if(ap.size() == 1){
+			return ap.get(0);
+		}
+		return null;
+	}
+	public Piece getPieceByX(String s, boolean white, Point to, int x){
+		ArrayList<Piece> ap = new ArrayList<Piece>();
+		for(Piece[] pa : board){
+			for(Piece p : pa){
+				if(p == null){
+					continue;
+				}else if(p.white == white && (p.name.equals(s) || p.symbol.equals(s)) && p.canTake(board, to) &&p.findMe(board).x == x){
+					ap.add(p);
+				}
+			}
+		}
+		if(ap.size() == 1){
+			return ap.get(0);
 		}
 		return null;
 	}
@@ -691,6 +762,52 @@ class Chessboard{
 		}
 		System.out.println();
 	}
+	public void printColor(boolean white){
+		if(!white){
+			for(int n = 0; n < board.length; n++){
+				System.out.print((n+1) + "\t");
+				for(int m = board[n].length-1; m >= 0; m--){
+					if(board[m][n] != null){
+						if(!board[m][n].white){
+							System.out.print("b");
+						}
+						System.out.print(board[m][n].name + "\t");
+					}else{
+						System.out.print("-\t");
+					}
+				}
+				System.out.println();
+				System.out.println();
+			}
+			System.out.print("\t");
+			for(int n = board.length-1; n >= 0; n--){
+				System.out.print(bokstav[n] + "\t");
+			}
+			System.out.println();
+		}else{
+			for(int n = board.length-1; n >= 0; n--){
+				System.out.print((n+1) + "\t");
+				for(int m = 0; m < board[n].length; m++){
+					if(board[m][n] != null){
+						if(!board[m][n].white){
+							System.out.print("b");
+						}
+						System.out.print(board[m][n].name + "\t");
+					}else{
+						System.out.print("-\t");
+					}
+				}
+				System.out.println();
+				System.out.println();
+			}
+			System.out.print("\t");
+			for(int n = 0; n < board.length-1; n++){
+				System.out.print(bokstav[n] + "\t");
+			}
+			System.out.println();
+			
+		}
+	}
 	public void printDefenders(){
 		for(Piece[] pi : board){
 			for(Piece p : pi){
@@ -735,6 +852,15 @@ class Chessboard{
 			System.out.println();
 		}
 	}
+	
+	int charToInt(String s){		
+		for(int n = 0; n < bokstav.length; n++){
+			if(bokstav[n].equals(s)){
+				return n;
+			}
+		}
+		return -1;
+	}	
 }
 
 class Piece{
