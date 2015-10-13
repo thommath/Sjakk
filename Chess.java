@@ -657,7 +657,12 @@ class Chessboard{
 				Chessboard c = new Chessboard(board);
 				c.move(a);
 				c.analyze();
-				if(c.finnBrikkerSomHenger().isEmpty() || c.finnStorsteVerdi(c.finnBrikkerSomHenger()).white != p.white){
+				if(c.finnBrikkerSomHenger().isEmpty() || c.finnStorsteVerdi(c.finnBrikkerSomHenger()).white != p.white){//Forbedre denne testen!!! 
+					c.moveComputer(!white);
+					c.analyze();
+					if(c.moveComputer(white) == null){
+						continue;
+					}
 					return a;
 				}
 			}
