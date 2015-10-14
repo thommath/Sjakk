@@ -10,12 +10,12 @@ class Chess{
 		board.analyze();
 		try{
 			
-		board.moveComputer(true, true);
+		board.moveComputer(true, true, true);
 		
 		}catch(FinnerIkkeBrikkeException e){
 			System.out.println(e);
 		}
-		board.printColor(true);
+		board.printColor(false);
 		
 		while(true){
 			try{
@@ -23,7 +23,7 @@ class Chess{
 				
 				board.analyze();
 				board.printBegge();
-				String m = board.moveComputer(true, true);
+				String m = board.moveComputer(true, true, true);
 				board.printColor(false);
 				System.out.println(m);
 			}catch(FeilInputException e){
@@ -164,7 +164,15 @@ class Chessboard{
 		move(p.findMe(board), to);
 	}
 	
-	public String moveComputer(boolean white, boolean first) throws FinnerIkkeBrikkeException{
+	public String moveComputer(boolean white, boolean first, boolean forceMove) throws FinnerIkkeBrikkeException{
+		//Finn alle lovelige trekk
+		//Lagre trekkene
+		//Begrens
+		//Lagre trekkene
+		//...
+		//gjør et tilfeldig av de trekkene 
+		
+		
 		//Save the king!
 		Piece king = getPiece("King", white);
 		if(king == null){
@@ -180,7 +188,7 @@ class Chessboard{
 				Chessboard c = new Chessboard(board);
 				c.move(a);
 				c.analyze();
-				if(c.moveComputer(!white, false) == null){
+				if(c.moveComputer(!white, false, false) == null){
 					return move(a);
 				}
 			}
@@ -202,13 +210,13 @@ class Chessboard{
 				}
 			}
 		}
-		if(!ta.isEmpty() && (beskytt.isEmpty() || finnStorsteVerdi(ta).value > finnStorsteVerdi(beskytt).value)){
+		if(!ta.isEmpty() && (beskytt.isEmpty() || (finnStorsteVerdi(ta).value > finnStorsteVerdi(beskytt).value && !finnStorsteVerdi(ta).inDanger()))){
 			return move(finnBrikkeSomTruer(finnStorsteVerdi(ta)).findMe(board), finnStorsteVerdi(ta).findMe(board));
 		}
 		
 		if(!beskytt.isEmpty()){
 			Piece redd = finnStorsteVerdi(beskytt);
-			if(finnBrikkeSomTruer(redd).value < redd.value && redd.canTake(board, finnBrikkeSomTruer(redd).findMe(board))){//Sjekke at brikken som truer storste verdi ikke er den jeg kan ta
+			if(finnBrikkeSomTruer(redd).value < redd.value && redd.canTake(board, finnBrikkeSomTruer(redd).findMe(board)) && !finnStorsteVerdi(ta).inDanger()){//Sjekke at brikken som truer storste verdi ikke er den jeg kan ta
 				return move(redd.findMe(board), finnBrikkeSomTruer(redd).findMe(board));
 			}else{
 				return move(protectPiece(redd));
@@ -227,13 +235,15 @@ class Chessboard{
 			}
 		}
 		//Random movement
-		
-		Action a = getRandomMove(white);
-		if(a == null){
-			System.out.println("Finner ingen lovlige trekk");
-			System.exit(0);
-		}
-		return move(a);
+		if(forceMove){
+			Action a = getRandomMove(white);
+			if(a == null){
+				System.out.println("Finner ingen lovlige trekk");
+				System.exit(0);
+			}
+			return move(a);
+			}
+		return "";
 		
 	}
 	
@@ -252,11 +262,10 @@ class Chessboard{
 			for(Action a : getAllPlayableMoves(p)){
 				options.add(a);
 			}
-			
-			if(!options.isEmpty()){
-				options = checkMoves(options, p.white);
-				return options.get((int)(options.size()*Math.random()));
-			}
+		}
+		options = checkMoves(options, p.white);
+		if(!options.isEmpty()){
+			return options.get((int)(options.size()*Math.random()));
 		}
 		return null;
 	}
@@ -278,9 +287,8 @@ class Chessboard{
 			for(Action a : getAllPlayableMoves(p)){
 				options.add(a);
 			}
-			
+			options = checkMoves(options, p.white);
 			if(!options.isEmpty()){
-				options = checkMoves(options, p.white);
 				return options.get((int)(options.size()*Math.random()));
 			}
 		}
@@ -537,16 +545,21 @@ class Chessboard{
 	private ArrayList<Action> checkMoves(ArrayList<Action> op, boolean white){
 		ArrayList<Action> options = new ArrayList<Action>();
 		for(Action a : op){
-			a.print();
-			Chessboard c = new Chessboard(board);
-			c.move(a);
-			c.analyze();
-			if(c.getPiece("King", white).attackers > 0){
-				continue;
+			if(checkMove(a, white)){
+				options.add(a);
 			}
-			options.add(a);
 		}
 		return options;
+	}
+	
+	private boolean checkMove(Action a, boolean white){
+		Chessboard c = new Chessboard(board);
+		c.move(a);
+		c.analyze();
+		if(c.getPiece("King", white) == null || c.getPiece("King", white).attackers > 0){
+			return false;
+		}
+		return true;
 	}
 	
 	String move(Point from, Point to){
@@ -658,12 +671,14 @@ class Chessboard{
 				c.move(a);
 				c.analyze();
 				if(c.finnBrikkerSomHenger().isEmpty() || c.finnStorsteVerdi(c.finnBrikkerSomHenger()).white != p.white){//Forbedre denne testen!!! 
-					c.moveComputer(!white);
+				try{
+					c.moveComputer(!white, false, false);
 					c.analyze();
-					if(c.moveComputer(white) == null){
+					if(c.moveComputer(white, false, false) == null){
 						continue;
 					}
 					return a;
+				}catch(FinnerIkkeBrikkeException e){}
 				}
 			}
 		}
@@ -688,12 +703,14 @@ class Chessboard{
 		}
 		
 		for(Action a : moves){
-			if(board[a.to.x][a.to.y] != null){
-				if(board[a.to.x][a.to.y].white != p.white){
+			if(checkMove(a, p.white)){
+				if(board[a.to.x][a.to.y] != null){
+					if(board[a.to.x][a.to.y].white != p.white){
+						pm.add(a);
+					}
+				}else{
 					pm.add(a);
 				}
-			}else{
-				pm.add(a);
 			}
 		}
 		if(pm.isEmpty()){
@@ -710,12 +727,14 @@ class Chessboard{
 			}
 			
 			for(Action a : moves){
-				if(board[a.to.x][a.to.y] != null){
-					if(board[a.to.x][a.to.y].white != p.white){
+				if(checkMove(a, white)){
+					if(board[a.to.x][a.to.y] != null){
+						if(board[a.to.x][a.to.y].white != p.white){
+							pm.add(a);
+						}
+					}else{
 						pm.add(a);
 					}
-				}else{
-					pm.add(a);
 				}
 			}
 		}
@@ -768,6 +787,8 @@ class Chessboard{
 		System.out.println();
 	}
 	public void printColor(boolean white){
+		System.out.println();
+		System.out.println();
 		if(!white){
 			for(int n = 0; n < board.length; n++){
 				System.out.print((n+1) + "\t");
@@ -781,6 +802,8 @@ class Chessboard{
 						System.out.print("-\t");
 					}
 				}
+				System.out.println();
+				System.out.println();
 				System.out.println();
 				System.out.println();
 			}
@@ -802,6 +825,8 @@ class Chessboard{
 						System.out.print("-\t");
 					}
 				}
+				System.out.println();
+				System.out.println();
 				System.out.println();
 				System.out.println();
 			}
